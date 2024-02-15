@@ -1,12 +1,6 @@
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from tqdm.auto import tqdm
-import seaborn as sns
-import matplotlib.pyplot as plt
-from datetime import datetime
-import argparse
-import os 
+
+from helper import *
+
 os.makedirs('data', exist_ok=True)
 os.makedirs('data/profile_data', exist_ok=True)
 
@@ -17,26 +11,20 @@ pd.set_option('display.max_rows', 100)
 parser = argparse.ArgumentParser()
 parser.add_argument('username')
 
-def get_total_pages_to_scrape(username):
+def get_total_pages_to_scrape(username, base_url):
     pages = []
-    first_url = f'https://letterboxd.com/{username}/films/diary/'
     
-    soup = get_soup_from_url(first_url)
+    soup = get_soup_from_url(base_url)
     total_pages = soup.find_all("div", class_="paginate-pages")[0].find_all('li')
     
     for i in range(len(total_pages)):
 
         suffix = '' if i <1 else f'page/{i+1}'
-        url = f"https://letterboxd.com/{username}/films/diary/{suffix}"
+        url = f"{base_url}/{suffix}"
 
         pages.append(url)
     return pages
 
-def get_soup_from_url(url):
-    page = requests.get(url)
-
-    soup = BeautifulSoup(page.content, "html.parser")
-    return soup
 
 def get_data_from_soup(soup):
     job_elements = soup.find_all("tr", class_="diary-entry-row viewing-poster-container")
@@ -65,21 +53,29 @@ def get_data_from_soup(soup):
     return pd.DataFrame.from_dict(data_dict).T
 
 
+def get_user_data_from_username(username):
+
+    profile_url = f'https://letterboxd.com/{username}/films/diary/'
+
+    total_pages = get_total_pages_to_scrape(username, base_url=profile_url)
+    df = pd.DataFrame()
+
+    for page in total_pages:    
+        soup = get_soup_from_url(page)
+        data = get_data_from_soup(soup)
+        df = pd.concat([df, data])
+
+    df['dw_date'] = datetime.today().date()
+    
+    print(f'Downloaded {df.shape[0]} rows for {username}')
+    df.to_csv(f'data/profile_data/{username}.csv')    
+    return df
+
+
 if __name__ == '__main__':
 
     args = parser.parse_args()
     # print(args)
 
     username = args.username
-    total_pages = get_total_pages_to_scrape(username)
-
-    df = pd.DataFrame()
-    for page in total_pages:
-        
-        soup = get_soup_from_url(page)
-        data = get_data_from_soup(soup)
-        df = pd.concat([df, data])
-
-    df['dw_date'] = datetime.today().date()
-    print(f'Downloaded {df.shape[0]} rows for {username}')
-    df.to_csv(f'data/profile_data/{username}.csv')    
+    _ = get_user_data_from_username(username)
